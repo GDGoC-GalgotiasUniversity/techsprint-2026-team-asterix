@@ -9,9 +9,9 @@
 
 | Name | Role | Email |
 | :--- | :--- | :--- |
-| **[Name]** | Team Lead | [Email] |
-| **[Name]** | Member | [Email] |
-| **[Name]** | Member | [Email] |
+| **[Saransh Rana]** | Team Lead | [saranshrana08@gmail.com] |
+| **[Manish Kumar]** | Member | [manishkumarmgs019@gmail.com] |
+| **[Ishita Katiyar]** | Member | [iishitakatiyar@gmail.com] |
 
 ---
 
