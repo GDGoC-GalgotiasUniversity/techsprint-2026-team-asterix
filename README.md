@@ -98,6 +98,23 @@ npx expo start
 
 ---
 
+## ⚙️ Environment Configuration
+
+This project uses **Google Gemini AI** for voice transcription and emergency intent detection.
+
+1.  Navigate to the `Frontend` directory.
+2.  Create a new file named `.env`.
+3.  Add your API key as shown below:
+
+```env
+EXPO_PUBLIC_GEMINI_API_KEY=your_google_gemini_api_key_here
+```
+
+> **Note**: Without this key, the Voice SOS feature will default to basic keyword matching or may not function as intended.
+
+---
+
+
 ## 📱 Features Breakdown
 
 ### 🔐 Authentication

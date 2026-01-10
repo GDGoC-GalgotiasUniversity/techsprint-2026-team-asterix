@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import { LinearGradient } from "expo-linear-gradient";
 import { Audio } from "expo-av";
 import { CameraView } from "expo-camera";
 import * as Location from "expo-location";
@@ -15,9 +16,13 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Dimensions,
+  Platform,
 } from "react-native";
 import { useVideoSOS } from "../../features/videoSOS/useVideoSOS";
 import useVoiceSOS from "../../features/voiceSOS/useVoiceSOS";
+
+const { width } = Dimensions.get("window");
 const BASE_URL = "http://10.10.150.219:8080";
 const API_URL = `${BASE_URL}/api/sos/trigger`;
 const CONTACTS_URL = `${BASE_URL}/api/contacts`;
@@ -34,10 +39,10 @@ interface Contact {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [data, setData] = useState({ x: 0, y: 0, z: 0 });
   const [cooldown, setCooldown] = useState(false);
   const isAutoSendingRef = useRef(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [lastSOS, setLastSOS] = useState<{
@@ -67,7 +72,10 @@ export default function HomeScreen() {
     sent?: boolean;
   }>({});
 
-  const THRESHOLD = 2.3; // lower = more sensitive, higher = less
+  // 🟢 Load contacts on mount
+  useEffect(() => {
+    refreshContacts();
+  }, []);
 
   // 🗣 Voice SOS Hook
   const { startListening, stopListening, isListening, isModelReady } = useVoiceSOS({
@@ -131,51 +139,8 @@ export default function HomeScreen() {
     }
   };
 
-  // 🔄 Keep track of latest handleMotion to avoid stale closures in listener
-  const handleMotionRef = useRef((data: any) => { });
-
-  useEffect(() => {
-    handleMotionRef.current = handleMotion;
-  });
-
-  const handleMotion = (motionData: { x: number; y: number; z: number }) => {
-    const { x, y, z } = motionData;
-    const magnitude = Math.sqrt(x * x + y * y + z * z);
-
-    if (magnitude > THRESHOLD && !cooldown && !tracking) {
-      console.log("🚨 Sudden motion detected:", magnitude);
-      triggerAutoSOS();
-    }
-  };
-
-  useEffect(() => {
-    console.log("📡 Starting accelerometer listener...");
-    Accelerometer.setUpdateInterval(200);
-
-    const subscription = Accelerometer.addListener((accelerometerData) => {
-      setData(accelerometerData);
-      // Call the REF to get the latest state (contacts, tracking, etc.)
-      handleMotionRef.current(accelerometerData);
-    });
-
-    // load contacts from backend
-    refreshContacts();
-
-    return () => {
-      console.log("📡 Stopping accelerometer listener...");
-      subscription && subscription.remove();
-
-      // stop tracking & clear interval if any
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-
-      // clear recording timer if any
-      if (recordingTimerRef.current) {
-        clearTimeout(recordingTimerRef.current);
-      }
-    };
-  }, [intervalId]);
+  // � Voice SOS Hook
+  // 🟢 Accelerometer Logic Moved to MotionMonitor Component 🟢
 
   // 📩 SMS (now can include optional audio URL)
   const sendSMSWithLocation = async (
@@ -609,10 +574,6 @@ export default function HomeScreen() {
     }
   };
 
-  const magnitude = Math.sqrt(
-    data.x * data.x + data.y * data.y + data.z * data.z
-  ).toFixed(2);
-
   const renderStatusBadge = (label: string, value: boolean | null) => {
     let text = "PENDING";
     let style = styles.badgePending;
@@ -692,639 +653,611 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
-      {/* Header Section */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.appTitle}>Ageis</Text>
-          <Text style={styles.appSubtitle}>
-            Smart emergency detection with motion, voice, and live location tracking
-          </Text>
-        </View>
-      </View>
-
-      {/* Main Content */}
-      <View style={styles.content}>
-        {/* Motion Detection Card */}
-        <View style={[styles.card, styles.motionCard]}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardIcon}>
-              <Text style={styles.cardIconText}>📡</Text>
-            </View>
-            <View>
-              <Text style={styles.cardTitle}>Motion Detection</Text>
-              <Text style={styles.cardSubtitle}>Live accelerometer monitoring</Text>
-            </View>
-          </View>
-
-          <View style={styles.motionContent}>
-            <View style={styles.magnitudeContainer}>
-              <Text style={styles.motionValue}>{magnitude}</Text>
-              <Text style={styles.motionUnit}>g-force</Text>
-            </View>
-
-            <View style={styles.thresholdContainer}>
-              <Text style={styles.thresholdLabel}>Threshold: {THRESHOLD.toFixed(1)} g</Text>
-              <View style={styles.thresholdBar}>
-                <View
-                  style={[
-                    styles.thresholdFill,
-                    {
-                      width: `${(Math.min(parseFloat(magnitude), THRESHOLD * 1.5) / (THRESHOLD * 1.5)) * 100}%`,
-                      backgroundColor: parseFloat(magnitude) > THRESHOLD ? '#ef4444' : '#22c55e'
-                    }
-                  ]}
-                />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.statusContainer}>
-            <View style={styles.statusItem}>
-              <View style={[styles.statusDot, cooldown ? styles.statusDotWarning : styles.statusDotSuccess]} />
-              <Text style={styles.statusText}>
-                {cooldown ? "Cooldown Active" : "Monitoring"}
-              </Text>
-            </View>
-            <View style={styles.statusItem}>
-              <View style={[styles.statusDot, tracking ? styles.statusDotActive : styles.statusDotInactive]} />
-              <Text style={styles.statusText}>
-                {tracking ? "Tracking Active" : "Tracking Ready"}
-              </Text>
-            </View>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={["#0f172a", "#1e1b4b", "#000000"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.background}
+      />
+      <ScrollView style={styles.screen} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Header Section */}
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Text style={styles.appTitle}>AGEIS</Text>
+            <Text style={styles.appSubtitle}>
+              Intelligent Protection System
+            </Text>
           </View>
         </View>
 
-        {/* Last SOS Status */}
-        <View style={[styles.card, styles.statusCard]}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardIcon}>
-              <Text style={styles.cardIconText}>🚨</Text>
-            </View>
-            <View>
-              <Text style={styles.cardTitle}>Last SOS Status</Text>
-              <Text style={styles.cardSubtitle}>
-                {lastSOS.time ? `Triggered at ${lastSOS.time}` : "No SOS events yet"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.statusBadges}>
-            {renderStatusBadge("Backend Service", lastSOS.backendOk)}
-            {renderStatusBadge("SMS Notifications", lastSOS.smsOk)}
-          </View>
-        </View>
-
-        {/* Emergency Contacts */}
-        <View style={[styles.card, styles.contactsCard]}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardIcon}>
-              <Text style={styles.cardIconText}>📞</Text>
-            </View>
-            <View>
-              <Text style={styles.cardTitle}>Emergency Contacts</Text>
-              <Text style={styles.cardSubtitle}>
-                {contacts.length} contact{contacts.length !== 1 ? 's' : ''} configured
-              </Text>
-            </View>
-          </View>
-
-          {/* Contacts List */}
-          {contacts.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateIcon}>👥</Text>
-              <Text style={styles.emptyStateTitle}>No Contacts</Text>
-              <Text style={styles.emptyStateText}>
-                Add emergency contacts to receive SOS alerts
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.contactsList}>
-              {contacts.map((c) => (
-                <TouchableOpacity
-                  key={c.id}
-                  style={styles.contactItem}
-                  onPress={() => handleDeleteContact(c.id)}
-                >
-                  <View style={styles.contactAvatar}>
-                    <Text style={styles.contactAvatarText}>
-                      {c.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.contactInfo}>
-                    <Text style={styles.contactName}>{c.name}</Text>
-                    <Text style={styles.contactPhone}>{c.phoneNumber}</Text>
-                  </View>
-                  <View style={styles.contactAction}>
-                    <Text style={styles.deleteText}>Remove</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Add Contact Form */}
-          <View style={styles.addContactForm}>
-            <Text style={styles.formTitle}>Add New Contact</Text>
-            <View style={styles.formRow}>
-              <TextInput
-                style={[styles.input, styles.flex1]}
-                placeholder="Full Name"
-                placeholderTextColor="#94a3b8"
-                value={contactName}
-                onChangeText={setContactName}
-              />
-              <TextInput
-                style={[styles.input, styles.flex1]}
-                placeholder="Phone Number"
-                placeholderTextColor="#94a3b8"
-                value={contactPhone}
-                onChangeText={setContactPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={handleAddContact}
-            >
-              <Text style={styles.addButtonText}>Add Contact</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* SOS Button Section */}
+        {/* SOS Button Section - Centerpiece */}
         <View style={styles.sosSection}>
           <View style={styles.sosContainer}>
+            {tracking && (
+              <>
+                <View style={[styles.pulseRing, styles.pulseRing1]} />
+                <View style={[styles.pulseRing, styles.pulseRing2]} />
+                <View style={[styles.pulseRing, styles.pulseRing3]} />
+              </>
+            )}
             <TouchableOpacity
-              style={[
-                styles.sosButton,
-                tracking && styles.sosButtonActive
-              ]}
+              style={styles.sosButtonCore}
               onPress={tracking ? stopTracking : triggerAutoSOS}
-              activeOpacity={0.8}
+              activeOpacity={0.9}
             >
-              <View style={styles.sosButtonInner}>
+              <LinearGradient
+                colors={tracking ? ["#7f1d1d", "#ef4444"] : ["#ef4444", "#dc2626"]}
+                style={[styles.sosButtonGradient, tracking && styles.sosButtonActive]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
                 <Text style={styles.sosIcon}>
                   {tracking ? "🛑" : "🚨"}
                 </Text>
                 <Text style={styles.sosText}>
-                  {tracking ? "STOP SOS" : "EMERGENCY SOS"}
+                  {tracking ? "STOP" : "SOS"}
                 </Text>
                 <Text style={styles.sosSubtext}>
-                  {tracking ? "Tap to stop emergency" : "Tap or shake to trigger"}
+                  {tracking ? "TRACKING ACTIVE" : "TAP TO ACTIVATE"}
                 </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Main Content */}
+        <View style={styles.cardsContainer}>
+          {/* Motion Detection Card (Isolated) */}
+          <MotionMonitor
+            tracking={tracking}
+            cooldown={cooldown}
+            onTrigger={triggerAutoSOS}
+          />
+
+          {/* Status Card */}
+          <View style={styles.card}>
+            <LinearGradient
+              colors={["rgba(30, 41, 59, 0.7)", "rgba(15, 23, 42, 0.4)"]}
+              style={styles.cardGradient}
+            >
+              <View style={styles.cardHeader}>
+                <View style={[styles.cardIcon, { backgroundColor: 'rgba(234, 179, 8, 0.2)' }]}>
+                  <Text style={styles.cardIconText}>🛡️</Text>
+                </View>
+                <View>
+                  <Text style={styles.cardTitle}>System Status</Text>
+                  <Text style={styles.cardSubtitle}>
+                    {lastSOS.time ? `Last Alert: ${lastSOS.time}` : "System Ready"}
+                  </Text>
+                </View>
               </View>
 
-              {/* Pulsing animation when tracking */}
-              {tracking && <View style={styles.pulseRing} />}
-              {tracking && <View style={[styles.pulseRing, styles.pulseRing2]} />}
-            </TouchableOpacity>
-
-            <Text style={styles.sosHint}>
-              {tracking
-                ? "Emergency active - Location tracking and audio recording enabled"
-                : "System ready - Motion and voice detection active"}
-            </Text>
+              <View style={styles.statusBadges}>
+                {renderStatusBadge("Backend", lastSOS.backendOk)}
+                {renderStatusBadge("SMS", lastSOS.smsOk)}
+              </View>
+            </LinearGradient>
           </View>
 
-          {/* Voice Test Link */}
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={() => router.push("/voice-test")}
-          >
-            <Text style={styles.testButtonText}>Test Voice SOS Module</Text>
-          </TouchableOpacity>
+          {/* Contacts Card */}
+          <View style={styles.card}>
+            <LinearGradient
+              colors={["rgba(30, 41, 59, 0.7)", "rgba(15, 23, 42, 0.4)"]}
+              style={styles.cardGradient}
+            >
+              <View style={styles.cardHeader}>
+                <View style={[styles.cardIcon, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
+                  <Text style={styles.cardIconText}>👥</Text>
+                </View>
+                <View>
+                  <Text style={styles.cardTitle}>Trusted Contacts</Text>
+                  <Text style={styles.cardSubtitle}>
+                    {contacts.length} Active {contacts.length === 1 ? 'Contact' : 'Contacts'}
+                  </Text>
+                </View>
+              </View>
+
+              {contacts.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>Add trusted contacts to notify in emergencies.</Text>
+                </View>
+              ) : (
+                <View style={styles.contactsList}>
+                  {contacts.map((c) => (
+                    <View key={c.id} style={styles.contactItem}>
+                      <View style={styles.contactAvatar}>
+                        <Text style={styles.contactAvatarText}>{c.name.charAt(0)}</Text>
+                      </View>
+                      <View style={styles.contactInfo}>
+                        <Text style={styles.contactName}>{c.name}</Text>
+                        <Text style={styles.contactPhone}>{c.phoneNumber}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => handleDeleteContact(c.id)}>
+                        <Text style={styles.deleteText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Add Contact Inputs */}
+              <View style={styles.addContactForm}>
+                <TextInput
+                  style={styles.modernInput}
+                  placeholder="Contact Name"
+                  placeholderTextColor="#64748b"
+                  value={contactName}
+                  onChangeText={setContactName}
+                />
+                <TextInput
+                  style={styles.modernInput}
+                  placeholder="Phone Number (+91...)"
+                  placeholderTextColor="#64748b"
+                  value={contactPhone}
+                  onChangeText={setContactPhone}
+                  keyboardType="phone-pad"
+                />
+                <TouchableOpacity style={styles.addButton} onPress={handleAddContact}>
+                  <Text style={styles.addButtonText}>Access Verification & Add</Text>
+                </TouchableOpacity>
+              </View>
+            </LinearGradient>
+          </View>
         </View>
 
-        {/* Logout Section */}
-        <View style={styles.logoutSection}>
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={logout}
-          >
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+        <View style={styles.footerSpacing} />
+      </ScrollView>
 
-
-      {/* Hidden Camera View for Background Recording */}
-      <View style={{ height: 1, width: 1, overflow: 'hidden', opacity: 0 }}>
-        <CameraView
-          ref={cameraRef}
-          style={{ flex: 1 }}
-          mode="video"
-          facing="back"
-          mute={false}
-        />
-      </View>
-    </ScrollView >
+      {/* Background Camera (Memoized to prevent re-renders) */}
+      <BackgroundCamera cameraRef={cameraRef} />
+    </View>
   );
-
 }
 
+const MotionMonitor = React.memo(({
+  tracking,
+  cooldown,
+  onTrigger
+}: {
+  tracking: boolean;
+  cooldown: boolean;
+  onTrigger: () => void;
+}) => {
+  const [data, setData] = useState({ x: 0, y: 0, z: 0 });
+  const THRESHOLD = 2.3;
+  const lastUpdate = useRef(0);
+  const onTriggerRef = useRef(onTrigger); // Stable ref
+  const trackingRef = useRef(tracking);
+  const cooldownRef = useRef(cooldown);
+
+  // Keep refs synced
+  useEffect(() => {
+    onTriggerRef.current = onTrigger;
+    trackingRef.current = tracking;
+    cooldownRef.current = cooldown;
+  }, [onTrigger, tracking, cooldown]);
+
+  useEffect(() => {
+    console.log("📡 Starting accelerometer listener (Isolated)...");
+    Accelerometer.setUpdateInterval(500);
+
+    const subscription = Accelerometer.addListener((accelerometerData) => {
+      // 1. Check for Trigger (Logic runs at full speed or throttled)
+      const { x, y, z } = accelerometerData;
+      const magnitude = Math.sqrt(x * x + y * y + z * z);
+
+      if (magnitude > THRESHOLD && !cooldownRef.current && !trackingRef.current) {
+        console.log("🚨 Sudden motion detected:", magnitude);
+        onTriggerRef.current(); // Trigger Parent
+      }
+
+      // 2. Update UI (Throttled)
+      const now = Date.now();
+      if (now - lastUpdate.current > 500) {
+        setData(accelerometerData);
+        lastUpdate.current = now;
+      }
+    });
+
+    return () => {
+      console.log("📡 Stopping accelerometer listener...");
+      subscription && subscription.remove();
+    };
+  }, []); // Empty dependency array = runs once on mount (stable)
+
+  const magnitude = Math.sqrt(
+    data.x * data.x + data.y * data.y + data.z * data.z
+  ).toFixed(2);
+
+  return (
+    <View style={styles.card}>
+      <LinearGradient
+        colors={["rgba(30, 41, 59, 0.7)", "rgba(15, 23, 42, 0.4)"]}
+        style={styles.cardGradient}
+      >
+        <View style={styles.cardHeader}>
+          <View style={[styles.cardIcon, { backgroundColor: 'rgba(59, 130, 246, 0.2)' }]}>
+            <Text style={styles.cardIconText}>📡</Text>
+          </View>
+          <View>
+            <Text style={styles.cardTitle}>Motion Monitor</Text>
+            <Text style={styles.cardSubtitle}>Accelerometer Sensor</Text>
+          </View>
+        </View>
+
+        <View style={styles.motionContent}>
+          <View style={styles.magnitudeContainer}>
+            <Text style={styles.motionValue}>{magnitude}</Text>
+            <Text style={styles.motionUnit}>G-FORCE</Text>
+          </View>
+
+          <View style={styles.thresholdBarContainer}>
+            <View style={styles.thresholdTrack}>
+              <View
+                style={[
+                  styles.thresholdFill,
+                  {
+                    width: `${Math.min((parseFloat(magnitude) / THRESHOLD) * 100, 100)}%`,
+                    backgroundColor: parseFloat(magnitude) > THRESHOLD ? '#ef4444' : '#10b981'
+                  }
+                ]}
+              />
+            </View>
+            <Text style={styles.thresholdLabel}>Threshold: {THRESHOLD}g</Text>
+          </View>
+        </View>
+
+        <View style={styles.statusRow}>
+          <View style={styles.statusPill}>
+            <View style={[styles.statusDot, cooldown ? styles.dotOrange : styles.dotGreen]} />
+            <Text style={styles.statusPillText}>{cooldown ? "COOLDOWN" : "MONITORING"}</Text>
+          </View>
+        </View>
+      </LinearGradient>
+    </View>
+  );
+});
+
+const BackgroundCamera = React.memo(({ cameraRef }: { cameraRef: any }) => {
+  return (
+    <View style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}>
+      <CameraView
+        ref={cameraRef}
+        style={{ flex: 1 }}
+        mode="video"
+        facing="back"
+        mute={true}
+      />
+    </View>
+  );
+});
+
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  background: {
+    ...StyleSheet.absoluteFillObject,
+  },
   screen: {
     flex: 1,
-    backgroundColor: "#0f172a",
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
   header: {
-    backgroundColor: "#1e293b",
+    paddingTop: 70,
+    paddingBottom: 30,
     paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    alignItems: 'center',
   },
   headerContent: {
     alignItems: 'center',
   },
   appTitle: {
     color: "white",
-    fontSize: 28,
-    fontWeight: "800",
-    textAlign: 'center',
-    marginBottom: 8,
+    fontSize: 34,
+    fontWeight: "900",
+    letterSpacing: 2,
+    textShadowColor: 'rgba(56, 189, 248, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 15,
   },
   appSubtitle: {
-    color: "#cbd5e1",
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
+    color: "#94a3b8",
+    fontSize: 13,
+    marginTop: 4,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
-  content: {
-    padding: 20,
+  sosSection: {
+    alignItems: 'center',
+    marginBottom: 40,
+    marginTop: 10,
+  },
+  sosContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 220,
+    height: 220,
+  },
+  sosButtonCore: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    elevation: 20,
+    shadowColor: "#ef4444",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+  },
+  sosButtonGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  sosButtonActive: {
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  sosIcon: {
+    fontSize: 42,
+    marginBottom: 5,
+  },
+  sosText: {
+    color: "white",
+    fontSize: 28,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  sosSubtext: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 10,
+    marginTop: 5,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  pulseRing: {
+    position: 'absolute',
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: '#ef4444',
+    opacity: 0.5,
+  },
+  pulseRing1: { width: 220, height: 220, opacity: 0.2 },
+  pulseRing2: { width: 260, height: 260, opacity: 0.1 },
+  pulseRing3: { width: 300, height: 300, opacity: 0.05 },
+  cardsContainer: {
+    paddingHorizontal: 20,
+    gap: 20,
   },
   card: {
-    backgroundColor: "#1e293b",
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: 24,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: "#334155",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  motionCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: "#3b82f6",
-  },
-  statusCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: "#f59e0b",
-  },
-  contactsCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: "#10b981",
+  cardGradient: {
+    padding: 20,
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   cardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 14,
   },
   cardIconText: {
-    fontSize: 18,
+    fontSize: 20,
   },
   cardTitle: {
-    color: "#f8fafc",
+    color: "white",
     fontSize: 18,
     fontWeight: "700",
   },
   cardSubtitle: {
     color: "#94a3b8",
     fontSize: 12,
-    marginTop: 2,
   },
   motionContent: {
     alignItems: 'center',
-    marginVertical: 16,
   },
   magnitudeContainer: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 15,
   },
   motionValue: {
-    color: "#f97316",
-    fontSize: 42,
+    color: "white",
+    fontSize: 48,
     fontWeight: "800",
-    textShadowColor: 'rgba(249, 115, 22, 0.3)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    fontVariant: ['tabular-nums'],
   },
   motionUnit: {
-    color: "#94a3b8",
-    fontSize: 14,
-    fontWeight: "600",
-    marginTop: -4,
-  },
-  thresholdContainer: {
-    width: '100%',
-  },
-  thresholdLabel: {
-    color: "#cbd5e1",
+    color: "#64748b",
     fontSize: 12,
-    marginBottom: 8,
-    textAlign: 'center',
+    fontWeight: "700",
+    letterSpacing: 1,
   },
-  thresholdBar: {
+  thresholdBarContainer: {
+    width: '100%',
+    marginTop: 10,
+  },
+  thresholdTrack: {
     height: 6,
-    backgroundColor: "#334155",
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 3,
     overflow: 'hidden',
-    padding: 0,
+    marginBottom: 8,
   },
   thresholdFill: {
     height: '100%',
     borderRadius: 3,
   },
-  statusContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
+  thresholdLabel: {
+    color: "#64748b",
+    fontSize: 10,
+    textAlign: 'right',
   },
-  statusItem: {
+  statusRow: {
+    flexDirection: 'row',
+    marginTop: 15,
+    justifyContent: 'center',
+  },
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 8,
   },
-  statusDotSuccess: {
-    backgroundColor: '#22c55e',
-  },
-  statusDotWarning: {
-    backgroundColor: '#f59e0b',
-  },
-  statusDotActive: {
-    backgroundColor: '#ef4444',
-  },
-  statusDotInactive: {
-    backgroundColor: '#6b7280',
-  },
-  statusText: {
-    color: "#cbd5e1",
+  dotGreen: { backgroundColor: '#10b981' },
+  dotOrange: { backgroundColor: '#f59e0b' },
+  statusPillText: {
+    color: '#cbd5e1',
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   statusBadges: {
-    marginTop: 8,
+    gap: 10,
   },
   badgeRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 8,
+    alignItems: "center",
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#334155",
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   badgeLabel: {
-    color: "#e2e8f0",
+    color: "#cbd5e1",
     fontSize: 14,
     fontWeight: "500",
   },
   badge: {
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    minWidth: 80,
-    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
+  badgeOk: { backgroundColor: 'rgba(16, 185, 129, 0.2)' },
+  badgeFailed: { backgroundColor: 'rgba(239, 68, 68, 0.2)' },
+  badgePending: { backgroundColor: 'rgba(100, 116, 139, 0.2)' },
   badgeText: {
-    color: "white",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-  },
-  badgeOk: {
-    backgroundColor: "#16a34a",
-  },
-  badgeFailed: {
-    backgroundColor: "#dc2626",
-  },
-  badgePending: {
-    backgroundColor: "#6b7280",
+    color: "white",
   },
   emptyState: {
+    padding: 20,
     alignItems: 'center',
-    paddingVertical: 32,
-  },
-  emptyStateIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  emptyStateTitle: {
-    color: "#e2e8f0",
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
   },
   emptyStateText: {
-    color: "#94a3b8",
-    fontSize: 12,
-    textAlign: 'center',
+    color: "#64748b",
+    fontSize: 14,
   },
   contactsList: {
     marginBottom: 20,
   },
   contactItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#334155",
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
   },
   contactAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#3b82f6",
-    alignItems: "center",
-    justifyContent: "center",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
   contactAvatarText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
+    color: 'white',
+    fontWeight: '700',
   },
   contactInfo: {
     flex: 1,
   },
   contactName: {
-    color: "#f8fafc",
-    fontSize: 15,
-    fontWeight: "600",
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   contactPhone: {
-    color: "#94a3b8",
-    fontSize: 13,
-    marginTop: 2,
-  },
-  contactAction: {},
-  deleteText: {
-    color: "#ef4444",
+    color: '#94a3b8',
     fontSize: 12,
-    fontWeight: '600',
+  },
+  deleteText: {
+    color: '#ef4444',
+    fontSize: 16,
+    padding: 4,
   },
   addContactForm: {
-    backgroundColor: "#0f172a",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#334155",
-  },
-  formTitle: {
-    color: "#e2e8f0",
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  formRow: {
-    flexDirection: 'row',
     gap: 12,
-    marginBottom: 12,
   },
-  input: {
-    backgroundColor: "#1e293b",
+  modernInput: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
     borderRadius: 12,
+    padding: 16,
+    color: 'white',
     borderWidth: 1,
-    borderColor: "#334155",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: "white",
-    fontSize: 14,
-  },
-  flex1: {
-    flex: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   addButton: {
-    backgroundColor: "#10b981",
+    backgroundColor: '#10b981',
+    padding: 16,
     borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    shadowColor: "#10b981",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    alignItems: 'center',
   },
   addButtonText: {
-    color: "white",
-    fontWeight: "700",
+    color: 'white',
+    fontWeight: '700',
     fontSize: 14,
   },
-  sosSection: {
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  sosContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  sosButton: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: "#ef4444",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#ef4444",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.6,
-    shadowRadius: 16,
-    elevation: 10,
-    marginBottom: 16,
-  },
-  sosButtonActive: {
-    backgroundColor: "#dc2626",
-  },
-  sosButtonInner: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  sosIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  sosText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: 1,
-    textAlign: "center",
-  },
-  sosSubtext: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 10,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  pulseRing: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 2,
-    borderColor: '#ef4444',
-    opacity: 0.6,
-  },
-  pulseRing2: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    opacity: 0.3,
-  },
-  sosHint: {
-    color: "#94a3b8",
-    fontSize: 12,
-    textAlign: "center",
-    lineHeight: 16,
-    maxWidth: 280,
-  },
-  testButton: {
-    backgroundColor: "#334155",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#475569",
-  },
-  testButtonText: {
-    color: "#e2e8f0",
-    fontSize: 14,
-    fontWeight: '600',
+  footerSpacing: {
+    height: 40,
   },
   logoutSection: {
-    alignItems: "center",
+    marginTop: 40,
     marginBottom: 40,
+    alignItems: 'center',
   },
   logoutButton: {
-    backgroundColor: "#1e293b",
     paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#334155",
+    paddingHorizontal: 24,
   },
   logoutButtonText: {
-    color: "#ef4444",
-    fontSize: 16,
-    fontWeight: "700",
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  testButton: {
+    marginTop: 20,
+    padding: 8,
+  },
+  testButtonText: {
+    color: '#64748b',
+    fontSize: 12,
   },
 });
