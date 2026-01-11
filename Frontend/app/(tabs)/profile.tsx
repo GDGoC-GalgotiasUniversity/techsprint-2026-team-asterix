@@ -83,7 +83,7 @@ export default function Profile() {
           <Text style={styles.role}>Registered User</Text>
 
           <View style={styles.memberSince}>
-            <Text style={styles.memberSinceText}>Ageis App Member</Text>
+            <Text style={styles.memberSinceText}>Aarambh App Member</Text>
           </View>
         </View>
       </View>
@@ -189,7 +189,7 @@ export default function Profile() {
 
       {/* App Info */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Ageis v1.0</Text>
+        <Text style={styles.footerText}>Aarambh v1.0</Text>
         <Text style={styles.footerSubtext}>Always here to protect you</Text>
       </View>
     </ScrollView>
